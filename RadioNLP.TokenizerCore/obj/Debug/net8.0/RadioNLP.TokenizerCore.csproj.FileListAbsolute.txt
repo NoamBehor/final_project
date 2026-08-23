@@ -1,0 +1,11 @@
+C:\final_project\RadioNLP.TokenizerCore\bin\Debug\net8.0\RadioNLP.TokenizerCore.deps.json
+C:\final_project\RadioNLP.TokenizerCore\bin\Debug\net8.0\RadioNLP.TokenizerCore.dll
+C:\final_project\RadioNLP.TokenizerCore\bin\Debug\net8.0\RadioNLP.TokenizerCore.pdb
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.GeneratedMSBuildEditorConfig.editorconfig
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.AssemblyInfoInputs.cache
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.AssemblyInfo.cs
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.csproj.CoreCompileInputs.cache
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.dll
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\refint\RadioNLP.TokenizerCore.dll
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\RadioNLP.TokenizerCore.pdb
+C:\final_project\RadioNLP.TokenizerCore\obj\Debug\net8.0\ref\RadioNLP.TokenizerCore.dll
