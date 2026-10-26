@@ -1,4 +1,5 @@
 import difflib
+import stanza
 from transformers import pipeline
 
 from pipeline_step1 import ingest_audio
@@ -7,6 +8,9 @@ from pipeline_step6 import crop_audio_for_review
 
 print("Loading AlephBERT for Contextual Scoring...")
 bert_masker = pipeline("fill-mask", model="onlplab/alephbert-base")
+
+print("Loading Stanza for Morphological Analysis (MWT)...")
+nlp = stanza.Pipeline(lang='he', processors='tokenize,mwt', use_gpu=False, verbose=False)
 
 def load_frequency_dictionary(filepath, max_words=10000):
     words = []
@@ -22,13 +26,47 @@ def load_frequency_dictionary(filepath, max_words=10000):
         print(f"Successfully loaded {len(words)} core vocabulary words.")
         return words
     except FileNotFoundError:
-        print(f"Error: Dictionary file {filepath} not found. Using empty dictionary.")
+        print(f"Error: Dictionary file {filepath} not found.")
         return []
 
 VALID_DICTIONARY = load_frequency_dictionary("he_50k.txt", max_words=10000)
 
-def generate_candidates(wrong_word, vocab, max_candidates=3):
-    return difflib.get_close_matches(wrong_word, vocab, n=max_candidates, cutoff=0.4)
+def generate_candidates(wrong_word, vocab, max_candidates=5):
+    """
+    שלב 3: Candidate Proposal + Morphological Analysis
+    כולל מצב ניפוי שגיאות (Debug) וגיבוי ידני לקידומות.
+    """
+    doc = nlp(wrong_word)
+    prefixes = ""
+    base_word = wrong_word
+    
+    # 1. ניסיון פיצול חכם בעזרת Stanza
+    if len(doc.sentences) > 0 and len(doc.sentences[0].words) > 1:
+        words = doc.sentences[0].words
+        base_word = words[-1].text
+        prefixes = "".join([w.text for w in words[:-1]])
+        print(f"    [Debug] Stanza split: Prefix='{prefixes}', Base='{base_word}'")
+        
+    # 2. גיבוי (Fallback): קילוף ידני של האות הראשונה אם היא קידומת מוכרת (עבור מילות ג'יבריש)
+    elif not prefixes and len(wrong_word) > 4 and wrong_word[0] in ['ה', 'ו', 'ב', 'ל', 'מ', 'ש', 'כ']:
+        prefixes = wrong_word[0]
+        base_word = wrong_word[1:]
+        print(f"    [Debug] Naive fallback split: Prefix='{prefixes}', Base='{base_word}'")
+
+    # 3. חיפוש הבסיס במילון 
+    base_candidates = difflib.get_close_matches(base_word, vocab, n=max_candidates, cutoff=0.35)
+    
+    # הרכבה מחדש
+    if prefixes:
+        final_candidates = [prefixes + c for c in base_candidates]
+    else:
+        final_candidates = base_candidates
+        
+    # הסרת כפילויות 
+    final_candidates = list(dict.fromkeys(final_candidates))
+    print(f"    [Debug] Proposed Candidates to BERT: {final_candidates}")
+    
+    return final_candidates
 
 def score_candidates(sentence, wrong_word, candidates):
     if not candidates:
@@ -37,9 +75,12 @@ def score_candidates(sentence, wrong_word, candidates):
     masked_sentence = sentence.replace(wrong_word, "[MASK]")
     predictions = bert_masker(masked_sentence, top_k=150)
     
-    # תיקון הבאג של המסיכות הכפולות (כמו במילה "את" ו-"אתמול")
     if len(predictions) > 0 and isinstance(predictions[0], list):
         predictions = predictions[0]
+        
+    # הדפסת הניחושים המובילים של BERT כדי להבין מה הוא רצה להשלים
+    top_guesses = [p['token_str'].replace("##", "").strip() for p in predictions[:5]]
+    print(f"    [Debug] BERT Top 5 Natural Guesses: {top_guesses}")
         
     scored_candidates = []
     
@@ -47,7 +88,8 @@ def score_candidates(sentence, wrong_word, candidates):
         best_score = 0.0
         for pred in predictions:
             pred_token = pred['token_str'].replace("##", "").strip()
-            if len(pred_token) >= 3 and (pred_token in candidate or candidate in pred_token):
+            # חיפוש גמיש יותר: המילה של BERT מוכלת במועמד שלנו או להפך
+            if len(pred_token) >= 2 and (pred_token in candidate or candidate in pred_token):
                 if pred['score'] > best_score:
                     best_score = pred['score']
         
@@ -58,7 +100,7 @@ def score_candidates(sentence, wrong_word, candidates):
         
     return sorted(scored_candidates, key=lambda x: x['score'], reverse=True)
 
-def make_decision(scored_candidates, min_score_threshold=0.015, min_gap=0.005):
+def make_decision(scored_candidates, min_score_threshold=0.008, min_gap=0.004):
     if not scored_candidates:
         return {"action": "ABSTAIN", "reason": "No candidates available", "word": None}
         
@@ -82,12 +124,10 @@ if __name__ == "__main__":
     print(f"🚀 Starting MS2 Pipeline on: {audio_file}")
     print("="*50)
 
-    # שלב 1: קליטה אקוסטית
     print("\n[Step 1] Transcribing audio with Whisper...")
     step1_data = ingest_audio(audio_file)
     original_sentence = " ".join([seg["text"] for seg in step1_data])
     
-    # שלב 2: זיהוי שגיאות
     print("\n[Step 2] Running SpanDetector...")
     detected_errors = analyze_spans(step1_data)
     
@@ -99,7 +139,6 @@ if __name__ == "__main__":
         for error in detected_errors:
             wrong_word = error["word"]
             
-            # חילוץ ציון הביטחון המקורי של Whisper מהשלב הראשון
             acoustic_confidence = 1.0
             start_sec, end_sec = 0, 0
             for seg in step1_data:
@@ -109,8 +148,6 @@ if __name__ == "__main__":
                         start_sec, end_sec = w["start"], w["end"]
                         break
             
-            # --- הפתרון החכם ---
-            # אם Whisper בטוח ב-85% ומעלה שזה נכון, כנראה שזו מילה תקינה עם קידומת. מתעלמים!
             if acoustic_confidence >= 0.85:
                 print(f"⏩ Skipping '{wrong_word}' (Whisper is confident: {acoustic_confidence:.2f})")
                 continue
