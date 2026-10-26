@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RadioNLP.TokenizerCore")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49556bd2d61df186be715f53f3630cca2e0d2c36")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f3485654cae490f0967f2dc0bea9744052d9ad61")]
 [assembly: System.Reflection.AssemblyProductAttribute("RadioNLP.TokenizerCore")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RadioNLP.TokenizerCore")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
