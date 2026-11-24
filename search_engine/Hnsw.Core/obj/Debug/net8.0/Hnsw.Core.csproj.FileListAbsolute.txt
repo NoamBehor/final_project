@@ -1,0 +1,12 @@
+C:\final_project\search_engine\Hnsw.Core\bin\Debug\net8.0\Hnsw.Core.deps.json
+C:\final_project\search_engine\Hnsw.Core\bin\Debug\net8.0\Hnsw.Core.dll
+C:\final_project\search_engine\Hnsw.Core\bin\Debug\net8.0\Hnsw.Core.pdb
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.GeneratedMSBuildEditorConfig.editorconfig
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.AssemblyInfoInputs.cache
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.AssemblyInfo.cs
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.csproj.CoreCompileInputs.cache
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.sourcelink.json
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.dll
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\refint\Hnsw.Core.dll
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\Hnsw.Core.pdb
+C:\final_project\search_engine\Hnsw.Core\obj\Debug\net8.0\ref\Hnsw.Core.dll
