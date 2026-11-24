@@ -18,7 +18,7 @@ public record HybridSearchHit(
 public class HybridSearchManager
 {
     private const string PgConnString = "Host=127.0.0.1;Port=5433;Username=admin;Password=admin123;Database=radio_nlp_db;";
-    private const int VectorDim = 128;
+    private const int VectorDim = 768;
 
     private readonly BM25 _bm25;
     private readonly HnswIndex _hnsw;
@@ -29,7 +29,7 @@ public class HybridSearchManager
     private readonly Dictionary<string, int> _messageIdToInt = new();
     private int _nextNodeId = 1;
 
-public HybridSearchManager()
+    public HybridSearchManager()
     {
         string stopwordsPath = Path.Combine(AppContext.BaseDirectory, "hebrew_stopwords.txt");
         _bm25 = new BM25(stopwordsPath);
@@ -41,7 +41,7 @@ public HybridSearchManager()
         await using var conn = new NpgsqlConnection(PgConnString);
         await conn.OpenAsync(ct);
 
-        const string sql = "SELECT message_id, frequency, original_text, corrected_text, created_at FROM transcriptions ORDER BY created_at ASC;";
+        const string sql = "SELECT message_id, frequency, original_text, corrected_text, created_at, embedding FROM transcriptions ORDER BY created_at ASC;";
         await using var cmd = new NpgsqlCommand(sql, conn);
         await using var reader = await cmd.ExecuteReaderAsync(ct);
 
@@ -55,14 +55,15 @@ public HybridSearchManager()
                 OriginalText = reader.GetString(2),
                 CorrectedText = reader.IsDBNull(3) ? null : reader.GetString(3),
                 Timestamp = reader.GetDateTime(4),
-                IsCorrected = !reader.IsDBNull(3)
+                IsCorrected = !reader.IsDBNull(3),
+                Embedding = reader.IsDBNull(5) ? Array.Empty<float>() : reader.GetFieldValue<float[]>(5)
             };
 
             IndexDocument(dto);
             loaded++;
         }
 
-        Console.WriteLine($"[HybridSearch] Hydrated {loaded} documents from PostgreSQL into BM25 & HNSW.");
+        Console.WriteLine($"[HybridSearch] Hydrated {loaded} documents from PostgreSQL into BM25 & HNSW (dim={VectorDim}).");
     }
 
     public void IndexDocument(TranscriptionDto dto)
@@ -70,7 +71,9 @@ public HybridSearchManager()
         string textToIndex = !string.IsNullOrWhiteSpace(dto.CorrectedText) ? dto.CorrectedText : dto.OriginalText;
         _docs[dto.MessageId] = dto;
 
-        float[] embedding = ComputeTextEmbedding(textToIndex);
+        float[] embedding = dto.Embedding.Length == VectorDim
+            ? dto.Embedding
+            : ComputeFallbackEmbedding(textToIndex);
 
         lock (_indexLock)
         {
@@ -86,12 +89,15 @@ public HybridSearchManager()
         }
     }
 
-    public List<HybridSearchHit> Search(string query, int topK = 5)
+    public List<HybridSearchHit> Search(string query, int topK = 5, float[]? queryEmbedding = null)
     {
-        if (string.IsNullOrWhiteSpace(query))
+        if (string.IsNullOrWhiteSpace(query) && (queryEmbedding == null || queryEmbedding.Length != VectorDim))
             return new List<HybridSearchHit>();
 
-        float[] queryVector = ComputeTextEmbedding(query);
+        float[] queryVector = (queryEmbedding != null && queryEmbedding.Length == VectorDim)
+            ? queryEmbedding
+            : ComputeFallbackEmbedding(query);
+
         List<Search.Engine.Core.SearchResult> bm25Results;
         List<Hnsw.Core.Search.SearchResult> hnswResults;
 
@@ -123,6 +129,7 @@ public HybridSearchManager()
 
         return rrfScores
             .OrderByDescending(kv => kv.Value)
+            .ThenBy(kv => distMap.GetValueOrDefault(kv.Key, float.MaxValue))
             .Take(topK)
             .Select(kv =>
             {
@@ -140,8 +147,7 @@ public HybridSearchManager()
             .ToList();
     }
 
-    // Character n-gram + token hashing vectorizer (replaceable with AlephBERT embeddings)
-    private float[] ComputeTextEmbedding(string text)
+    private float[] ComputeFallbackEmbedding(string text)
     {
         var vec = new float[VectorDim];
         var tokens = _bm25.PreprocessHebrew(text);

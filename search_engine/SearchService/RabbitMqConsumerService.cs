@@ -29,6 +29,9 @@ public class TranscriptionDto
 
     [JsonPropertyName("is_corrected")]
     public bool IsCorrected { get; set; }
+
+    [JsonPropertyName("embedding")]
+    public float[] Embedding { get; set; } = Array.Empty<float>();
 }
 
 public class RabbitMqConsumerService : BackgroundService
@@ -39,10 +42,10 @@ public class RabbitMqConsumerService : BackgroundService
     private IModel? _channel;
     private readonly HybridSearchManager _searchManager;
 
-public RabbitMqConsumerService(HybridSearchManager searchManager)
-{
-    _searchManager = searchManager;
-}
+    public RabbitMqConsumerService(HybridSearchManager searchManager)
+    {
+        _searchManager = searchManager;
+    }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -73,7 +76,7 @@ public RabbitMqConsumerService(HybridSearchManager searchManager)
                 {
                     await SaveToPostgresAsync(dto, stoppingToken);
                     _searchManager.IndexDocument(dto);
-                    Console.WriteLine($"[C# SearchService] Saved DTO {dto.MessageId} ('{dto.CorrectedText}') to PostgreSQL.");
+                    Console.WriteLine($"[C# SearchService] Saved DTO {dto.MessageId} (dim={dto.Embedding.Length}) -> '{dto.CorrectedText}'");
                 }
 
                 _channel.BasicAck(deliveryTag: ea.DeliveryTag, multiple: false);
@@ -93,17 +96,23 @@ public RabbitMqConsumerService(HybridSearchManager searchManager)
 
     private static async Task SaveToPostgresAsync(TranscriptionDto dto, CancellationToken ct)
     {
-        byte[] audioBytes = File.Exists(dto.AudioFilePath)
-            ? await File.ReadAllBytesAsync(dto.AudioFilePath, ct)
+        string resolvedAudioPath = Path.IsPathRooted(dto.AudioFilePath)
+            ? dto.AudioFilePath
+            : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", dto.AudioFilePath));
+
+        byte[] audioBytes = File.Exists(resolvedAudioPath)
+            ? await File.ReadAllBytesAsync(resolvedAudioPath, ct)
             : Array.Empty<byte>();
 
         await using var conn = new NpgsqlConnection(PgConnString);
         await conn.OpenAsync(ct);
 
         const string sql = @"
-            INSERT INTO transcriptions (message_id, frequency, original_text, corrected_text, audio_file, created_at)
-            VALUES (@id, @freq, @orig, @corr, @audio, @created)
-            ON CONFLICT (message_id) DO NOTHING;";
+            INSERT INTO transcriptions (message_id, frequency, original_text, corrected_text, audio_file, embedding, created_at)
+            VALUES (@id, @freq, @orig, @corr, @audio, @emb, @created)
+            ON CONFLICT (message_id) DO UPDATE SET
+                corrected_text = EXCLUDED.corrected_text,
+                embedding = EXCLUDED.embedding;";
 
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("id", Guid.Parse(dto.MessageId));
@@ -111,6 +120,7 @@ public RabbitMqConsumerService(HybridSearchManager searchManager)
         cmd.Parameters.AddWithValue("orig", dto.OriginalText);
         cmd.Parameters.AddWithValue("corr", (object?)dto.CorrectedText ?? DBNull.Value);
         cmd.Parameters.AddWithValue("audio", audioBytes);
+        cmd.Parameters.AddWithValue("emb", dto.Embedding.Length > 0 ? dto.Embedding : DBNull.Value);
         cmd.Parameters.AddWithValue("created", dto.Timestamp.ToUniversalTime());
 
         await cmd.ExecuteNonQueryAsync(ct);

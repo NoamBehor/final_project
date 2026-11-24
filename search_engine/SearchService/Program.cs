@@ -33,4 +33,12 @@ app.MapGet("/api/search", (string q, int topK, HybridSearchManager manager) =>
     return Results.Ok(results);
 });
 
+app.MapPost("/api/search", (SearchRequest req, HybridSearchManager manager) =>
+{
+    var results = manager.Search(req.Query, req.TopK > 0 ? req.TopK : 5, req.QueryEmbedding);
+    return Results.Ok(results);
+});
+
 app.Run();
+
+public record SearchRequest(string Query, int TopK = 5, float[]? QueryEmbedding = null);

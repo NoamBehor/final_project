@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 class TranscriptionDTO(BaseModel):
     message_id: str
@@ -10,3 +10,5 @@ class TranscriptionDTO(BaseModel):
     original_text: str
     corrected_text: Optional[str] = None
     is_corrected: bool = False
+    segments: List[Dict[str, Any]] = Field(default_factory=list)
+    embedding: List[float] = Field(default_factory=list)

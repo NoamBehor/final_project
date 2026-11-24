@@ -25,7 +25,11 @@ namespace RadioNLP.Shared
 
         [JsonPropertyName("is_corrected")]
         public bool IsCorrected { get; set; }
+
+        [JsonPropertyName("embedding")]
+        public List<float> Embedding { get; set; }
     }
+    
 }
 
 
